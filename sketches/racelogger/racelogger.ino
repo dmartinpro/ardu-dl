@@ -212,7 +212,7 @@ void handshake() {
 }
 
 /*
- * Send a read command to the nunchuk and fill the nunchuk_values array 
+ * Send a read command to the nunchuk and fill the nunchuk_values array
  */
 void read_nunchuk() {
   Wire.requestFrom(0x52, 6);
@@ -413,13 +413,13 @@ void display() {
   if (settings.line2_display_mode == LINE2_MODE_BRAKE_THROTTLE) {
     int brake_value = analogs[ANA_BRAKE];
     int throttle_value = analogs[ANA_THROTTLE];
-  
+
     int brake_display_value = 0;
     int throttle_display_value = 0;
-  
+
     brake_display_value = (int) (((float) brake_value)*8/100+0.5);
     throttle_display_value = (int) (((float) throttle_value)*8/100+0.5);
-  
+
 
     for(int i = 7; i >= 0; i--) {
       if (i < brake_display_value) {
@@ -428,7 +428,7 @@ void display() {
         strcat(line2, "\x14");
       }
     }
-  
+
     for(int i = 0; i < 8; i++) {
       if (i < throttle_display_value) {
         strcat(line2, "\x04");
@@ -732,7 +732,7 @@ void reset_avg_values() {
   avg_throttle.clr();
 }
 
-/* 
+/*
  * Drive the servo.
  * If the previous angle measure is older than the defined interval (INTERVAL_DURATION), then
  * read the angle of the bike and if it has changed more than the THRESHOLD, move the servo accordingly.
@@ -951,6 +951,9 @@ void drawMenu() {
           set_minimum_throttle();
         }
       case 4 :
+        if (lcd_button == BP_RIGHT) {
+          set_minimum_throttle();
+        }
         draw_minimum_throttle();
         break;
       case 5 :
@@ -1007,7 +1010,7 @@ void drawMenu() {
   } else {
     display();
   }
-  
+
 }
 
 
@@ -1027,7 +1030,7 @@ void setup() {
   draw("RaceLogger 2.3", "Warming up...");
 
   // EEPROM stuff
-  settings_address  = EEPROM.getAddress(sizeof(ConfigurationStruct)); // Size of settings object 
+  settings_address  = EEPROM.getAddress(sizeof(ConfigurationStruct)); // Size of settings object
   EEPROM.setMemPool(EEPROM_BASE, EEPROMSizeUno); //Set memorypool base to EEPROM_BASE, assume Arduino Uno board
   EEPROM.setMaxAllowedWrites(EEPROM_MAX_ALLOWED_WRITES);
   settings_loaded = load_EEPROM_settings();
@@ -1050,7 +1053,7 @@ void setup() {
 
   // Set up Nunchuk dependent values
   read_nunchuk();
-  // Angular sensor values (min, med, max) 
+  // Angular sensor values (min, med, max)
   acc_cw90_x_axis = 180; // cw: clockwise, hardcoded for now
   acc_horiz_x_axis = ((nunchuk_values[NC_ACC_X_AXIS] - 395) > 100 || (nunchuk_values[NC_ACC_X_AXIS] - 395) < -100) ? 395 : nunchuk_values[NC_ACC_X_AXIS]; // ~90° (horizontal)
   acc_acw90_x_axis = 610; // acw: anti clockwise, hardcoded for now
@@ -1108,4 +1111,3 @@ void loop() {
   }
 
 }
-
