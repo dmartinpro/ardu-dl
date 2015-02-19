@@ -6,7 +6,7 @@
 #include <string.h>
 #include <EEPROMex.h>
 
-#define VERSION 1.0
+#define VERSION 1.1
 
 #define LCD_LEFT_ARROW 3
 #define LCD_RIGHT_ARROW 4
