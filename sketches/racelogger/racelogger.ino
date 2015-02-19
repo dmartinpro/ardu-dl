@@ -12,7 +12,7 @@
 #define LCD_RIGHT_ARROW 4
 
 #define SERVO_PIN 11
-#define LCD_SHIELD_CMD_PIN 14 //A0
+#define LCD_SHIELD_CMD_PIN 14 // A0
 #define BRAKE_PIN 15          // A1
 #define THROTTLE_PIN 16       // A2
 #define LCD_PIN_1 8
@@ -61,6 +61,7 @@ RunningAverage avg_throttle(3);
 // #######################################################
 
 const char *app_name = "RaceLogger";
+const char *app_author = " by David MARTIN";
 char app_screen_name[16];
 
 // LCD shield
@@ -94,9 +95,11 @@ const int BUTTONS_DELAY = 200; // minimum milliseconds between two buttons event
 boolean calibration_mode = false;
 unsigned int calibration_item = 0;
 
-int menu_items_number = 12;
+int menu_items_number = 13;
 const char* line1_options[3] = {"Angle", "Throttle", "Brake"};
+#define LINE1_OPTS_NB (sizeof(line1_options) / sizeof(char*))
 const char* line2_options[2] = {"Throt-Brake", "Angle"};
+#define LINE2_OPTS_NB (sizeof(line2_options) / sizeof(char*))
 
 // non blocking ops times
 unsigned long execution_intervals[4][2]; // 4 intervals(servo bluetooth, drawscreen & nunchuk), with 2 values each(duration, last)
@@ -236,8 +239,8 @@ void read_nunchuk() {
 }
 
 void parse_nunchuk_response() {
-  byte joy_x_axis = buffer[0]; // joystick axe x(0-255)
-  byte joy_y_axis = buffer[1]; // joystick axe y(0-255)
+  byte joy_x_axis = buffer[0]; // joystick X axe (0-255)
+  byte joy_y_axis = buffer[1]; // joystick Y axe (0-255)
   int accel_x_axis = buffer[2] * 4; // acc x
   int accel_y_axis = buffer[3] * 4; // acc y
   int accel_z_axis = buffer[4] * 4; // acc z
@@ -641,13 +644,13 @@ void set_raw_servo() {
 
 void set_line1_display_mode() {
   if (lcd_button == BP_LEFT) {
-    if (settings.line1_display_mode == 0) {
-      settings.line1_display_mode = sizeof(line1_options)-1;
+    if (settings.line1_display_mode <= 0) {
+      settings.line1_display_mode = LINE1_OPTS_NB-1;
     } else {
       settings.line1_display_mode--;
     }
   } else if (lcd_button == BP_RIGHT){
-    if (settings.line1_display_mode == sizeof(line1_options)-1) {
+    if (settings.line1_display_mode >= LINE1_OPTS_NB-1) {
       settings.line1_display_mode = 0;
     } else {
       settings.line1_display_mode++;
@@ -658,13 +661,13 @@ void set_line1_display_mode() {
 
 void set_line2_display_mode() {
   if (lcd_button == BP_LEFT) {
-    if (settings.line2_display_mode == 0) {
-      settings.line2_display_mode = sizeof(line2_options)-1;
+    if (settings.line2_display_mode <= 0) {
+      settings.line2_display_mode = LINE2_OPTS_NB-1;
     } else {
       settings.line2_display_mode--;
     }
   } else if (lcd_button == BP_RIGHT){
-    if (settings.line2_display_mode == sizeof(line2_options)-1) {
+    if (settings.line2_display_mode >= LINE2_OPTS_NB-1) {
       settings.line2_display_mode = 0;
     } else {
       settings.line2_display_mode++;
@@ -922,7 +925,21 @@ void draw_save_settings() {
   draw(line1, line2);
 }
 
-void drawMenu() {
+void draw_about_menu_item() {
+  char line1[16];
+  char line2[16];
+  strcpy(line1, "13. About");
+  strcpy(line2, " Press Right -->");
+  draw(line1, line2);
+}
+
+void draw_about_screen() {
+  char line2[16];
+  strcpy(line2, app_author);
+  draw(app_screen_name, line2, 1500);
+}
+
+void draw_menu() {
   lcd_button = read_shield_button();
 
   if (prev_button == BP_NONE && lcd_button == BP_NONE && (millis()-last_none_null_button_timestamp) > BUTTONS_MAX_INACTIVITY) {
@@ -1022,6 +1039,12 @@ void drawMenu() {
         }
         draw_save_settings();
         break;
+      case 13 :
+        if (lcd_button == BP_RIGHT) {
+          draw_about_screen();
+        }
+        draw_about_menu_item();
+        break;
       default :
         calibration_item = 1;
       }
@@ -1031,6 +1054,21 @@ void drawMenu() {
 
 }
 
+/**
+ * Argh, Arduino's sprintf doesn't support float numbers
+ */
+char *ftoa(char *a, double f, int precision) {
+  long p[] = {0,10,100,1000,10000,100000,1000000,10000000,100000000};
+
+  char *ret = a;
+  long heiltal = (long)f;
+  itoa(heiltal, a, 10);
+  while (*a != '\0') a++;
+  *a++ = '.';
+  long desimal = abs((long)((f - heiltal) * p[precision]));
+  itoa(desimal, a, 10);
+  return ret;
+}
 
 // ###############################################################
 
@@ -1038,8 +1076,10 @@ void drawMenu() {
 void setup() {
 
   strcpy(app_screen_name, app_name);
-  strcpy(app_screen_name, " ");
-  sprintf(app_screen_name, "%1.1f", VERSION);
+  strcat(app_screen_name, " ");
+  char _version[5];
+  ftoa(_version, VERSION, 1);
+  strcat(app_screen_name, _version);
 
   lcd.begin(16, 2);
 
@@ -1047,10 +1087,9 @@ void setup() {
   delay(40);
   lcd.createChar(4, custom_hex2);
   delay(40);
-
   lcd.clear();
 
-  draw(app_screen_name, "Warming up...", 1000);
+  draw(app_screen_name, "Warming up...");
 
   // EEPROM stuff
   settings_address  = EEPROM.getAddress(sizeof(ConfigurationStruct)); // Size of settings object
@@ -1124,7 +1163,7 @@ void setup() {
 /* Main loop */
 void loop() {
 
-  drawMenu();
+  draw_menu();
 
   if (!calibration_mode) {
     acquire_data();
