@@ -6,6 +6,8 @@
 #include <string.h>
 #include <EEPROMex.h>
 
+#define VERSION 1.0
+
 #define LCD_LEFT_ARROW 3
 #define LCD_RIGHT_ARROW 4
 
@@ -42,7 +44,7 @@
 #define INTERVAL_DURATION 0
 #define INTERVAL_LAST 1
 
-#define SERVO_ANGLE_THRESHOLD 2 // minimum difference angle to send to the servo a rotation signal
+#define SERVO_ANGLE_THRESHOLD 2 // minimum difference angle to send a rotation signal to the servo
 
 // ID of the settings block
 #define CONFIG_VERSION "AL1"
@@ -57,21 +59,13 @@ RunningAverage avg_brake(3);
 RunningAverage avg_throttle(3);
 
 // #######################################################
+
+const char *app_name = "RaceLogger";
+char app_screen_name[16];
+
 // LCD shield
 LiquidCrystal lcd(LCD_PIN_1, LCD_PIN_2, LCD_PIN_3, LCD_PIN_4, LCD_PIN_5, LCD_PIN_6);
-//LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
-
-byte lcd_button;
-byte prev_button = 0;
-unsigned long prev_button_timestamp = 0;
-unsigned long last_none_null_button_timestamp = 0;
-const unsigned long BUTTONS_MAX_INACTIVITY = 5000; // After this delay, the configuration menu is replaced with the running screen
-
-uint8_t custom_hex0[8] = {0x1F,0x1F,0x1F,0x1F,0x1F,0x1F,0x1F,0x1F}; // full square
-uint8_t custom_hex1[8] = {0x02,0x06,0x0E,0x1E,0x1E,0x0E,0x06,0x02}; // square with right empty line
-uint8_t custom_hex2[8] = {0x08,0x0C,0x0E,0x0F,0x0F,0x0E,0x0C,0x08}; // square with left empty line
-
-const int BUTTONS_DELAY = 200; // minimum milliseconds between two buttons events
+// LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 // LCD shield buttons values
 enum {
@@ -83,6 +77,18 @@ enum {
   BP_RIGHT
 };
 
+byte lcd_button = BP_NONE;
+byte prev_button = BP_NONE;
+unsigned long prev_button_timestamp = 0;
+unsigned long last_none_null_button_timestamp = 0;
+const unsigned long BUTTONS_MAX_INACTIVITY = 5000; // After this delay, the configuration menu is replaced with the running screen
+
+uint8_t custom_hex0[8] = {0x1F,0x1F,0x1F,0x1F,0x1F,0x1F,0x1F,0x1F}; // full square
+uint8_t custom_hex1[8] = {0x02,0x06,0x0E,0x1E,0x1E,0x0E,0x06,0x02}; // square with right empty line
+uint8_t custom_hex2[8] = {0x08,0x0C,0x0E,0x0F,0x0F,0x0E,0x0C,0x08}; // square with left empty line
+
+const int BUTTONS_DELAY = 200; // minimum milliseconds between two buttons events
+
 // ############ CONFIGURATION MENU VALUES ######################
 
 boolean calibration_mode = false;
@@ -90,7 +96,10 @@ unsigned int calibration_item = 0;
 
 int menu_items_number = 12;
 const char* line1_options[3] = {"Angle", "Throttle", "Brake"};
-const char* line2_options[2] = {"Throt/Brake", "Angle"};
+const char* line2_options[2] = {"Throt-Brake", "Angle"};
+
+// non blocking ops times
+unsigned long execution_intervals[4][2]; // 4 intervals(servo bluetooth, drawscreen & nunchuk), with 2 values each(duration, last)
 
 // #######################################################
 
@@ -159,17 +168,15 @@ enum {
 };
 
 byte buffer[6]; // Buffer containing the 6 bytes coming from the nunchuk
-byte cnt = 0; // current buffer index. NOTE: maybe doesn't need to be global...
+byte cnt = 0; // Current buffer index. NOTE: maybe doesn't need to be global...
 int acc_horiz_x_axis = 0;
 int acc_cw90_x_axis = 0;
 int acc_acw90_x_axis = 0;
 float acc2servo_ratio = 0;
 
-unsigned long execution_intervals[4][2]; // 4 intervals(servo bluetooth, drawscreen & nunchuk), with 2 values each(duration, last)
-
-int last_servo_angle = 0; // last known position
-// Servo
+// ############# Servo related variables ###################
 Servo cam_servo;
+int last_servo_angle = 0; // last known position
 
 
 // Timer2 Service (bluetooth related)
@@ -331,8 +338,13 @@ int get_brake_value() {
   if (settings.brake_ratio == 0) {
     set_brake_ratio();
   }
+  if (pin_value < settings.min_brake) {
+    pin_value = settings.min_brake;
+  } else if (pin_value > settings.max_brake) {
+    pin_value = settings.max_brake;
+  }
   float value = ((float)(pin_value - settings.min_brake)) * settings.brake_ratio;
-  return ((value >= 0) ? (int)(value+0.5) : -1);
+  return (int)(value+0.5);
 }
 
 int get_throttle_value() {
@@ -340,8 +352,13 @@ int get_throttle_value() {
   if (settings.throttle_ratio == 0) {
     set_throttle_ratio();
   }
+  if (pin_value < settings.min_throttle) {
+    pin_value = settings.min_throttle;
+  } else if (pin_value > settings.max_throttle) {
+    pin_value = settings.max_throttle;
+  }
   float value = ((float)(pin_value - settings.min_throttle)) * settings.throttle_ratio;
-  return ((value >= 0) ? (int)(value+0.5) : -1);
+  return (int)(value+0.5);
 }
 
 int get_bike_angle() {
@@ -364,7 +381,6 @@ int get_raw_bike_angle() {
     return 180 - (angle >= 0 ?(int)(angle+0.5) :(int)(angle-0.5));
   }
 }
-
 
 /**
  * Return the right smoothed (avg) bike angle depending on the nunchuk read value
@@ -419,7 +435,6 @@ void display() {
 
     brake_display_value = (int) (((float) brake_value)*8/100+0.5);
     throttle_display_value = (int) (((float) throttle_value)*8/100+0.5);
-
 
     for(int i = 7; i >= 0; i--) {
       if (i < brake_display_value) {
@@ -537,10 +552,8 @@ byte read_shield_button(void) {
   /* Read analog input A0 (LCD_SHIELD_CMD_PIN) */
   unsigned int val = analogRead(LCD_SHIELD_CMD_PIN);
 
-  /* Test against range values */
-  if (val > 1000) { // NOTHING OR UNKNOWN
-    current_button = BP_NONE;
-  } else if (val < 30) { // RIGHT (0)
+  /* Test against a set of values */
+  if (val < 30) { // RIGHT (0)
     current_button = BP_RIGHT;
   } else if (val < 210) { // UP (132)
     current_button = BP_UP;
@@ -550,15 +563,16 @@ byte read_shield_button(void) {
     current_button = BP_LEFT;
   } else if (val < 800) { // SELECT (720)
     current_button = BP_SELECT;
-  } else {
-    current_button = BP_NONE;
   }
+
   if ((millis() - prev_button_timestamp) < BUTTONS_DELAY) {
     return BP_NONE;
   }
+
   if (current_button != BP_NONE) {
     last_none_null_button_timestamp = millis();
   }
+
   prev_button_timestamp = millis();
   prev_button = current_button;
 
@@ -667,7 +681,9 @@ void set_save_settings() {
 void set_brake_ratio() {
   float delta =(float)(settings.max_brake - settings.min_brake);
   float ratio = 100/delta;
-  if (ratio < 0) {
+  if (ratio == 0) {
+    settings.brake_ratio = 1.0;
+  } else if (ratio < 0) {
     settings.brake_ratio = -1.0*ratio;
   } else {
     settings.brake_ratio = ratio;
@@ -677,7 +693,9 @@ void set_brake_ratio() {
 void set_throttle_ratio() {
   float delta =(float)(settings.max_throttle - settings.min_throttle);
   float ratio = 100/delta;
-  if (ratio < 0) {
+  if (ratio == 0) {
+    settings.throttle_ratio = 1.0;
+  } else if (ratio < 0) {
     settings.throttle_ratio = -1.0*ratio;
   } else {
     settings.throttle_ratio = ratio;
@@ -717,7 +735,7 @@ void send_rc2_message() {
   if (millis() - execution_intervals[INTERVAL_BLUETOOTH][INTERVAL_LAST] > execution_intervals[INTERVAL_BLUETOOTH][INTERVAL_DURATION]) {
     execution_intervals[INTERVAL_BLUETOOTH][INTERVAL_LAST] = millis();
 
-    // Verification de l'etat de la connexion BT
+    // Verify bluetooth connection status
     if (bt_state == 1) {
       Serial.print(get_RC2_message(analogs));
     }
@@ -1018,6 +1036,11 @@ void drawMenu() {
 
 
 void setup() {
+
+  strcpy(app_screen_name, app_name);
+  strcpy(app_screen_name, " ");
+  sprintf(app_screen_name, "%1.1f", VERSION);
+
   lcd.begin(16, 2);
 
   lcd.createChar(3, custom_hex1);
@@ -1027,7 +1050,7 @@ void setup() {
 
   lcd.clear();
 
-  draw("RaceLogger 2.3", "Warming up...");
+  draw(app_screen_name, "Warming up...", 1000);
 
   // EEPROM stuff
   settings_address  = EEPROM.getAddress(sizeof(ConfigurationStruct)); // Size of settings object
@@ -1095,9 +1118,8 @@ void setup() {
 
   set_horizon_value();
 
-  draw("RaceLogger 2.3", "Running...", 1500);
+  draw(app_screen_name, "Running...", 1500);
 }
-
 
 /* Main loop */
 void loop() {
