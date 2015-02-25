@@ -44,6 +44,11 @@
 #define INTERVAL_DURATION 0
 #define INTERVAL_LAST 1
 
+#define DEFAULT_NUNCHUK_FREQUENCY 50 // Hertz
+#define DEFAULT_DISPLAY_FREQUENCY 30 // Hertz
+#define DEFAULT_RC2_FREQUENCY 30 // Hertz
+#define DEFAULT_SERVO_FREQUENCY 25 // Hertz
+
 #define SERVO_ANGLE_THRESHOLD 2 // minimum difference angle to send a rotation signal to the servo
 
 // ID of the settings block
@@ -67,6 +72,11 @@ char app_screen_name[16];
 // LCD shield
 LiquidCrystal lcd(LCD_PIN_1, LCD_PIN_2, LCD_PIN_3, LCD_PIN_4, LCD_PIN_5, LCD_PIN_6);
 // LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
+
+const int DEFAULT_DISPLAY_INTERVAL = 1000/DEFAULT_DISPLAY_FREQUENCY;
+const int DEFAULT_RC2_INTERVAL = 1000/DEFAULT_RC2_FREQUENCY;
+const int DEFAULT_NUNCHUK_INTERVAL = 1000/DEFAULT_NUNCHUK_FREQUENCY;
+const int DEFAULT_SERVO_INTERVAL = 1000/DEFAULT_SERVO_FREQUENCY;
 
 // LCD shield buttons values
 enum {
@@ -816,8 +826,11 @@ void draw(char* line1, char* line2, long wait) {
     for(int i = 0; i < 16 - line_length; ++i) {
       lcd.write(" ");
     }
-
-    execution_intervals[INTERVAL_LCD][INTERVAL_DURATION] = wait;
+    if (wait < DEFAULT_DISPLAY_INTERVAL) {
+      execution_intervals[INTERVAL_LCD][INTERVAL_DURATION] = DEFAULT_DISPLAY_INTERVAL;
+    } else {
+      execution_intervals[INTERVAL_LCD][INTERVAL_DURATION] = wait;
+    }
   }
 }
 
@@ -1143,16 +1156,16 @@ void setup() {
   reset_avg_values();
 
   // Time references init:
-  execution_intervals[INTERVAL_NUNCHUK][INTERVAL_DURATION] = 25; // poll nunchuk every n ms
+  execution_intervals[INTERVAL_NUNCHUK][INTERVAL_DURATION] = DEFAULT_NUNCHUK_INTERVAL; // poll nunchuk every n ms
   execution_intervals[INTERVAL_NUNCHUK][INTERVAL_LAST] = 0;
 
-  execution_intervals[INTERVAL_SERVO][INTERVAL_DURATION] = 40; // write servo position every n ms
+  execution_intervals[INTERVAL_SERVO][INTERVAL_DURATION] = DEFAULT_SERVO_INTERVAL; // write servo position every n ms
   execution_intervals[INTERVAL_SERVO][INTERVAL_LAST] = 0;
 
-  execution_intervals[INTERVAL_BLUETOOTH][INTERVAL_DURATION] = 100; // send rc2 message every n ms
+  execution_intervals[INTERVAL_BLUETOOTH][INTERVAL_DURATION] = DEFAULT_RC2_INTERVAL; // send rc2 message every n ms
   execution_intervals[INTERVAL_BLUETOOTH][INTERVAL_LAST] = 0;
 
-  execution_intervals[INTERVAL_LCD][INTERVAL_DURATION] = 20; // wait n ms before writing on the screen again
+  execution_intervals[INTERVAL_LCD][INTERVAL_DURATION] = DEFAULT_DISPLAY_INTERVAL; // wait n ms before writing on the screen again
   execution_intervals[INTERVAL_LCD][INTERVAL_LAST] = 0;
 
   set_horizon_value();
